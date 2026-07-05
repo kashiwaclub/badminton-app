@@ -1,37 +1,293 @@
-border-sky-200' : 'bg-rose-50 text-rose-700 border-rose-200';
-                span.className = `px-3 py-1 rounded-md text-sm font-bold border ${genderClass}`;
-                span.textContent = p.name;
-                container.appendChild(span);
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>バドミントン 試合ローテーション</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* iPhoneのホーム画面追加時の対応 */
+        meta[name="apple-mobile-web-app-capable"] { content: "yes"; }
+        meta[name="apple-mobile-web-app-status-bar-style"] { content: "black-translucent"; }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .tab-btn.active {
+            border-color: #0ea5e9;
+            color: #0ea5e9;
+            background-color: #f0f9ff;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-700 font-sans min-h-screen pb-12">
+
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-10 px-4 py-3 shadow-sm">
+        <div class="max-w-md mx-auto flex justify-between items-center">
+            <h1 class="text-lg font-bold text-slate-800 tracking-tight">バドローテ App</h1>
+            
+            <div class="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
+                <span id="timer-display" class="font-mono text-lg font-bold text-slate-800">08:00</span>
+                <button id="btn-timer-toggle" class="bg-sky-500 hover:bg-sky-600 text-white text-xs px-2.5 py-1 rounded-full font-medium transition">
+                    スタート
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-md mx-auto px-4 mt-4">
+        
+        <div class="flex border-b border-slate-200 mb-4 bg-white rounded-t shadow-sm">
+            <button onclick="switchTab('tab-match')" id="btn-tab-match" class="tab-btn active flex-1 text-center py-3 text-sm font-bold border-b-2 border-transparent text-slate-500 transition">
+                試合表示
+            </button>
+            <button onclick="switchTab('tab-member')" id="btn-tab-member" class="tab-btn flex-1 text-center py-3 text-sm font-bold border-b-2 border-transparent text-slate-500 transition">
+                メンバー管理・回数
+            </button>
+        </div>
+
+        <div id="tab-match" class="tab-content active space-y-4">
+            
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3">
+                <div class="flex items-center justify-between gap-4">
+                    <div class="flex items-center gap-1.5">
+                        <label class="text-xs font-bold text-slate-500 whitespace-nowrap">コート数:</label>
+                        <select id="select-courts" class="bg-slate-50 border border-slate-300 rounded px-2 py-1 text-sm font-bold text-slate-700 focus:outline-none focus:border-sky-500">
+                            <option value="1">1面</option>
+                            <option value="2">2面</option>
+                            <option value="3" selected>3面</option>
+                        </select>
+                    </div>
+                    
+                    <div class="flex items-center gap-1.5">
+                        <label class="text-xs font-bold text-slate-500 whitespace-nowrap">時間設定:</label>
+                        <input type="number" id="input-timer-min" value="8" min="1" max="60" class="w-12 bg-slate-50 border border-slate-300 rounded px-1.5 py-1 text-sm font-bold text-center text-slate-700 focus:outline-none focus:border-sky-500">
+                        <span class="text-xs font-bold text-slate-500">分</span>
+                    </div>
+                </div>
+
+                <button id="btn-draw" class="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-2.5 rounded-lg shadow transition text-center block">
+                    試合抽選 (次の試合へ)
+                </button>
+            </div>
+
+            <div class="flex justify-between items-center">
+                <h2 id="text-match-number" class="text-base font-bold text-slate-800 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-slate-200">
+                    第0試合
+                </h2>
+                <button id="btn-reset-match" class="text-xs text-slate-400 hover:text-slate-600 transition underline">
+                    試合数をリセット
+                </button>
+            </div>
+
+            <div id="courts-list" class="space-y-3">
+                <div class="text-center py-8 text-slate-400 text-sm bg-white rounded-xl border border-dashed border-slate-300">
+                    「試合抽選」ボタンを押すとここにコートが割り振られます
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 pb-1 border-b border-slate-100">
+                    今回のお休み
+                </h3>
+                <div id="rest-list" class="flex flex-wrap gap-2">
+                    <span class="text-sm text-slate-400 italic">なし</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-member" class="tab-content space-y-4">
+            
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h3 class="text-sm font-bold text-slate-700 mb-2">メンバーの参加・不参加設定</h3>
+                <p class="text-xs text-slate-400 mb-4">今日参加する番号をオンにしてください。練習の途中で追加・離脱させる場合はここで切り替えます。</p>
+                
+                <div class="mb-4">
+                    <h4 class="text-xs font-bold text-sky-600 mb-2 flex justify-between items-center">
+                        <span>男性 (青)</span>
+                        <span class="text-[10px] text-slate-400">タップで切替</span>
+                    </h4>
+                    <div id="male-toggle-container" class="grid grid-cols-5 gap-1.5">
+                        </div>
+                </div>
+
+                <div>
+                    <h4 class="text-xs font-bold text-rose-600 mb-2 flex justify-between items-center">
+                        <span>女性 (赤)</span>
+                        <span class="text-[10px] text-slate-400">タップで切替</span>
+                    </h4>
+                    <div id="female-toggle-container" class="grid grid-cols-5 gap-1.5">
+                        </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-center mb-3 pb-1 border-b border-slate-100">
+                    <h3 class="text-sm font-bold text-slate-700">お休み回数リスト</h3>
+                    <button id="btn-reset-counts" class="text-xs text-rose-500 hover:text-rose-700 font-medium transition underline">
+                        回数をリセット
+                    </button>
+                </div>
+                
+                <div class="max-h-64 overflow-y-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-left text-xs font-bold text-slate-400 border-b border-slate-100">
+                                <th class="pb-1">メンバー</th>
+                                <th class="pb-1">性別</th>
+                                <th class="pb-1 text-right">お休み回数</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-rest-counts">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // --- 状態管理 ---
+        let players = [];
+        let matchCount = 0;
+        let courtsCount = 3;
+        
+        // タイマー状態
+        let timerSecondsTotal = 8 * 60;
+        let timerSecondsLeft = 8 * 60;
+        let timerId = null;
+        let isTimerRunning = false;
+
+        // プレイヤーの初期化 (男1〜20, 女1〜20)
+        function initPlayers() {
+            players = [];
+            // 男1〜20
+            for(let i = 1; i <= 20; i++) {
+                players.push({
+                    id: 'M' + i,
+                    name: '男' + i,
+                    gender: 'M',
+                    active: i <= 12, // 初期状態で12人ずつ参加にしてみる
+                    restCount: 0,
+                    lastState: 'none' // 'play', 'rest', 'none'
+                });
+            }
+            // 女1〜20
+            for(let i = 1; i <= 20; i++) {
+                players.push({
+                    id: 'F' + i,
+                    name: '女' + i,
+                    gender: 'F',
+                    active: i <= 12, // 初期状態で12人ずつ参加にしてみる
+                    restCount: 0,
+                    lastState: 'none'
+                });
+            }
+        }
+
+        // --- 画面表示更新 ---
+        
+        // タブ切り替え
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(tabId).classList.add('active');
+            if(tabId === 'tab-match') document.getElementById('btn-tab-match').classList.add('active');
+            if(tabId === 'tab-member') document.getElementById('btn-tab-member').classList.add('active');
+            
+            if(tabId === 'tab-member') {
+                renderMemberManagement();
+                renderRestCountsTable();
+            }
+        }
+
+        // メンバー管理画面（トグルボタン）の描画
+        function renderMemberManagement() {
+            const maleContainer = document.getElementById('male-toggle-container');
+            const femaleContainer = document.getElementById('female-toggle-container');
+            
+            maleContainer.innerHTML = '';
+            femaleContainer.innerHTML = '';
+            
+            players.forEach(p => {
+                const btn = document.createElement('button');
+                btn.className = `text-xs font-bold py-2 rounded-lg border transition shadow-sm text-center`;
+                btn.textContent = p.name;
+                
+                if(p.gender === 'M') {
+                    if(p.active) {
+                        btn.className += ' bg-sky-100 text-sky-800 border-sky-300';
+                    } else {
+                        btn.className += ' bg-slate-100 text-slate-400 border-slate-200 line-through';
+                    }
+                    btn.onclick = () => { p.active = !p.active; renderMemberManagement(); };
+                    maleContainer.appendChild(btn);
+                } else {
+                    if(p.active) {
+                        btn.className += ' bg-rose-100 text-rose-800 border-rose-300';
+                    } else {
+                        btn.className += ' bg-slate-100 text-slate-400 border-slate-200 line-through';
+                    }
+                    btn.onclick = () => { p.active = !p.active; renderMemberManagement(); };
+                    femaleContainer.appendChild(btn);
+                }
             });
         }
 
-        // --- リセット系の処理 ---
-        document.getElementById('btn-reset-match').addEventListener('click', () => {
-            if(confirm('試合数を0に戻しますか？')) {
-                matchCount = 0;
-                document.getElementById('text-match-number').textContent = `第0試合`;
-                document.getElementById('courts-list').innerHTML = `
-                    <div class="text-center py-8 text-slate-400 text-sm bg-white rounded-xl border border-dashed border-slate-300">
-                        「試合抽選」ボタンを押すとここにコートが割り振られます
-                    </div>
+        // お休み回数テーブルの描画
+        function renderRestCountsTable() {
+            const tbody = document.getElementById('table-rest-counts');
+            tbody.innerHTML = '';
+            
+            // 参加中を優先、その中でお休み回数が多い順にソートして見やすく
+            const sorted = [...players].sort((a, b) => {
+                if(a.active !== b.active) return b.active - a.active;
+                return b.restCount - a.restCount;
+            });
+
+            sorted.forEach(p => {
+                const tr = document.createElement('tr');
+                tr.className = `border-b border-slate-100 py-1.5 ${p.active ? '' : 'opacity-40'}`;
+                
+                const genderBadge = p.gender === 'M' ? '<span class="text-xs bg-sky-50 text-sky-600 px-1.5 py-0.5 rounded">男</span>' : '<span class="text-xs bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded">女</span>';
+                const statusStr = p.active ? '' : ' <span class="text-[10px] text-slate-400">(不参加)</span>';
+
+                tr.innerHTML = `
+                    <td class="py-2 font-medium">${p.name}${statusStr}</td>
+                    <td class="py-2">${genderBadge}</td>
+                    <td class="py-2 text-right font-bold font-mono">${p.restCount}回</td>
                 `;
-                document.getElementById('rest-list').innerHTML = '<span class="text-sm text-slate-400 italic">なし</span>';
-                players.forEach(p => p.lastState = 'none');
-            }
-        });
+                tbody.appendChild(tr);
+            });
+        }
 
-        document.getElementById('btn-reset-counts').addEventListener('click', () => {
-            if(confirm('全員のお休み回数を0にリセットしますか？')) {
-                players.forEach(p => p.restCount = 0);
-                renderRestCountsTable();
-                alert('リセットしました');
-            }
-        });
+        // --- タイマー機能 ---
+        const timerDisplay = document.getElementById('timer-display');
+        const btnTimerToggle = document.getElementById('btn-timer-toggle');
+        const inputTimerMin = document.getElementById('input-timer-min');
 
+        function updateTimerDisplay() {
+            const min = Math.floor(timerSecondsLeft / 60);
+            const sec = timerSecondsLeft % 60;
+            timerDisplay.textContent = `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+        }
 
-        // --- 初期起動 ---
-        initPlayers();
-        resetTimer();
-    </script>
-</body>
-</html>
+        function resetTimer() {
+            clearInterval(timerId);
+            isTimerRunning = false;
+            btnTimerToggle.textContent = 'スタート';
+            btnTimerToggle.className = "bg-sky-500 hover:bg-sky-600 text-white text-xs px-2.5 py-1 rounded-full font-medium transition";
+            
+            const mins = parseInt(inputTimerMin.value) || 8;
+            timerSecondsTotal = mins * 60;
+            timerSecondsLeft = timerSecondsTotal;
+            updateTimerDisplay();
+        }
+
+        inputTimerMin.addEventListener('change', resetTimer);
+
+        btnTimerToggle.addEventListener('click', () => {
+            if(isTimerRunning) {
+                // ストップ
+                clearInterval(timerId);
