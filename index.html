@@ -162,8 +162,7 @@
         const btnLogin = document.getElementById('btn-login');
         const errorPassword = document.getElementById('error-password');
 
-        // "kashiwa" を暗号化したハッシュ値。生文字列はコードから完全に消滅
-        // 正しいコード（kashiwaのハッシュ値）
+        // "kashiwa" を暗号化したハッシュ値
         const targetHash = "a3d3ea8421a110d476128015f017d04249b4809c8998abdb2efbe4a2f10d4e86";
 
         if (localStorage.getItem('badminton_auth') === 'true') {
@@ -173,7 +172,6 @@
         async function attemptLogin() {
             const inputVal = inputPassword.value;
             
-            // Web Crypto API を利用してSHA-256でハッシュ化
             const msgUint8 = new TextEncoder().encode(inputVal);
             const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
             const hashArray = Array.from(new Uint8Array(hashBuffer));
@@ -241,12 +239,12 @@
 
         function initPlayers() {
             players = [];
-            // 30人仕様 (男15、女15)
+            // 初期状態を全員不参加（active: false）スタートに変更して消し忘れリスクを排除
             for(let i = 1; i <= 15; i++) {
-                players.push({ id: 'M' + i, name: '男' + i, gender: 'M', active: i <= 12, restCount: 0, restStreak: 0 });
+                players.push({ id: 'M' + i, name: '男' + i, gender: 'M', active: false, restCount: 0, restStreak: 0 });
             }
             for(let i = 1; i <= 15; i++) {
-                players.push({ id: 'F' + i, name: '女' + i, gender: 'F', active: i <= 12, restCount: 0, restStreak: 0 });
+                players.push({ id: 'F' + i, name: '女' + i, gender: 'F', active: false, restCount: 0, restStreak: 0 });
             }
             pairHistory = {};
             enemyHistory = {};
