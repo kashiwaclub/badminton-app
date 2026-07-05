@@ -1,0 +1,37 @@
+border-sky-200' : 'bg-rose-50 text-rose-700 border-rose-200';
+                span.className = `px-3 py-1 rounded-md text-sm font-bold border ${genderClass}`;
+                span.textContent = p.name;
+                container.appendChild(span);
+            });
+        }
+
+        // --- リセット系の処理 ---
+        document.getElementById('btn-reset-match').addEventListener('click', () => {
+            if(confirm('試合数を0に戻しますか？')) {
+                matchCount = 0;
+                document.getElementById('text-match-number').textContent = `第0試合`;
+                document.getElementById('courts-list').innerHTML = `
+                    <div class="text-center py-8 text-slate-400 text-sm bg-white rounded-xl border border-dashed border-slate-300">
+                        「試合抽選」ボタンを押すとここにコートが割り振られます
+                    </div>
+                `;
+                document.getElementById('rest-list').innerHTML = '<span class="text-sm text-slate-400 italic">なし</span>';
+                players.forEach(p => p.lastState = 'none');
+            }
+        });
+
+        document.getElementById('btn-reset-counts').addEventListener('click', () => {
+            if(confirm('全員のお休み回数を0にリセットしますか？')) {
+                players.forEach(p => p.restCount = 0);
+                renderRestCountsTable();
+                alert('リセットしました');
+            }
+        });
+
+
+        // --- 初期起動 ---
+        initPlayers();
+        resetTimer();
+    </script>
+</body>
+</html>
