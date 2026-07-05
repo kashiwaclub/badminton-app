@@ -163,7 +163,8 @@
         const errorPassword = document.getElementById('error-password');
 
         // "kashiwa" を暗号化したハッシュ値。生文字列はコードから完全に消滅
-        const targetHash = "d0d4b97116812822a13f683416b23a1a3cc7ccb5c4dfdbd6594dcbb5fc622fc3";
+        // 正しいコード（kashiwaのハッシュ値）
+        const targetHash = "a3d3ea8421a110d476128015f017d04249b4809c8998abdb2efbe4a2f10d4e86";
 
         if (localStorage.getItem('badminton_auth') === 'true') {
             loginOverlay.style.display = 'none';
