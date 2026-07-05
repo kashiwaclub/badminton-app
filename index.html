@@ -21,7 +21,7 @@
 
     <header class="bg-white border-b border-slate-200 sticky top-0 z-10 px-4 py-3 shadow-sm">
         <div class="max-w-md mx-auto flex justify-between items-center">
-            <h1 class="text-lg font-bold text-slate-800 tracking-tight">バドローテ App</h1>
+            <h1 class="text-lg font-bold text-slate-800 tracking-tight">バドローテ App Pro</h1>
             <div class="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
                 <span id="timer-display" class="font-mono text-lg font-bold text-slate-800">08:00</span>
                 <button id="btn-timer-toggle" class="bg-sky-500 hover:bg-sky-600 text-white text-xs px-2.5 py-1 rounded-full font-medium transition">
@@ -64,6 +64,9 @@
                     試合抽選 (次の試合へ)
                 </button>
             </div>
+
+            <!-- 通知メッセージエリア -->
+            <div id="alert-msg-container" class="hidden bg-amber-50 border border-amber-200 p-3 rounded-lg text-xs text-amber-700 font-medium"></div>
 
             <div class="flex justify-between items-center">
                 <h2 id="text-match-number" class="text-base font-bold text-slate-800 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-slate-200">
@@ -115,7 +118,7 @@
                 <div class="flex justify-between items-center mb-3 pb-1 border-b border-slate-100">
                     <h3 class="text-sm font-bold text-slate-700">お休み回数リスト</h3>
                     <button id="btn-reset-counts" class="text-xs text-rose-500 hover:text-rose-700 font-medium transition underline">
-                        回数をリセット
+                        全てをリセット (重複履歴も消去)
                     </button>
                 </div>
                 <div class="max-h-64 overflow-y-auto">
@@ -135,10 +138,17 @@
     </main>
 
     <script>
+        // --- 状態管理 ---
         let players = [];
         let matchCount = 0;
         let courtsCount = 3;
         
+        // 重複度記録用オブジェクト
+        let pairHistory = {}; // {'M1-M2': 2}
+        let enemyHistory = {}; // {'M1-F1': 1}
+        let courtHistory = {}; // {'M1-1': 2}（誰が何コートに何回入ったか）
+
+        // タイマー
         let timerSecondsTotal = 8 * 60;
         let timerSecondsLeft = 8 * 60;
         let timerId = null;
@@ -146,12 +156,43 @@
 
         function initPlayers() {
             players = [];
+            // 男1〜20, 女1〜20
             for(let i = 1; i <= 20; i++) {
-                players.push({ id: 'M' + i, name: '男' + i, gender: 'M', active: i <= 12, restCount: 0, lastState: 'none' });
+                players.push({ id: 'M' + i, name: '男' + i, gender: 'M', active: i <= 12, restCount: 0, restStreak: 0 });
             }
             for(let i = 1; i <= 20; i++) {
-                players.push({ id: 'F' + i, name: '女' + i, gender: 'F', active: i <= 12, restCount: 0, lastState: 'none' });
+                players.push({ id: 'F' + i, name: '女' + i, gender: 'F', active: i <= 12, restCount: 0, restStreak: 0 });
             }
+            // 履歴リセット
+            pairHistory = {};
+            enemyHistory = {};
+            courtHistory = {};
+        }
+
+        // 履歴カウント取得補助関数
+        function getPairCount(p1, p2) {
+            let key = [p1, p2].sort().join('-');
+            return pairHistory[key] || 0;
+        }
+        function addPairCount(p1, p2) {
+            let key = [p1, p2].sort().join('-');
+            pairHistory[key] = (pairHistory[key] || 0) + 1;
+        }
+        function getEnemyCount(p1, p2) {
+            let key = [p1, p2].sort().join('-');
+            return enemyHistory[key] || 0;
+        }
+        function addEnemyCount(p1, p2) {
+            let key = [p1, p2].sort().join('-');
+            enemyHistory[key] = (enemyHistory[key] || 0) + 1;
+        }
+        function getCourtCount(pid, cNum) {
+            let key = `${pid}-${cNum}`;
+            return courtHistory[key] || 0;
+        }
+        function addCourtCount(pid, cNum) {
+            let key = `${pid}-${cNum}`;
+            courtHistory[key] = (courtHistory[key] || 0) + 1;
         }
 
         function switchTab(tabId) {
@@ -212,6 +253,7 @@
             });
         }
 
+        // --- タイマー ---
         const timerDisplay = document.getElementById('timer-display');
         const btnTimerToggle = document.getElementById('btn-timer-toggle');
         const inputTimerMin = document.getElementById('input-timer-min');
@@ -260,119 +302,172 @@
             }
         });
 
+        // --- アルゴリズムの実装（ChatGPT提案ベース） ---
         document.getElementById('btn-draw').addEventListener('click', () => {
             courtsCount = parseInt(document.getElementById('select-courts').value);
             const neededPlayers = courtsCount * 4;
             const activePlayers = players.filter(p => p.active);
             
+            const alertBox = document.getElementById('alert-msg-container');
+            alertBox.classList.add('hidden');
+
             if(activePlayers.length < neededPlayers) {
                 alert(`参加中のメンバーが足りません。\n現在のコート数に必要な人数: ${neededPlayers}人\n現在オンの人数: ${activePlayers.length}人`);
                 return;
             }
 
-            const sortedPlayers = [...activePlayers].sort((a, b) => {
-                const aLastRest = a.lastState === 'rest' ? 1 : 0;
-                const bLastRest = b.lastState === 'rest' ? 1 : 0;
-                if(aLastRest !== bLastRest) return bLastRest - aLastRest;
-                if(a.restCount !== b.restCount) return b.restCount - a.restCount;
-                return Math.random() - 0.5;
+            // Step2: スコア算出と優先度ランキング化
+            activePlayers.forEach(p => {
+                p.score = p.restCount * 100;
+                if (p.restStreak === 1) p.score += 1000;
+                if (p.restStreak >= 2) p.score += 100000; // 最優先出場
             });
 
-            let selected = sortedPlayers.slice(0, neededPlayers);
-            let rest = sortedPlayers.slice(neededPlayers);
+            // 男女別にスコア順（降順）でソート
+            let activeMales = activePlayers.filter(p => p.gender === 'M').sort((a,b) => b.score - a.score);
+            let activeFemales = activePlayers.filter(p => p.gender === 'F').sort((a,b) => b.score - a.score);
 
-            let males = selected.filter(p => p.gender === 'M');
-            let females = selected.filter(p => p.gender === 'F');
+            // Step3 & 4: 男女別の出場候補数の決定と偶数最適化
+            let bestMalesCount = 0;
+            let bestFemalesCount = 0;
+            let minScoreLoss = Infinity;
 
-            if (males.length % 2 !== 0) {
-                let maleToRest = [...males].sort((a,b) => a.restCount - b.restCount)[0];
-                let femaleToPlay = [...rest].filter(p => p.gender === 'F').sort((a,b) => b.restCount - a.restCount)[0];
+            // 可能な「男：偶数 / 女：偶数」の組み合わせパターンを総当たりで評価 (数パターンのみ)
+            for (let mCount = 0; mCount <= neededPlayers; mCount += 2) {
+                let fCount = neededPlayers - mCount;
+                if (mCount <= activeMales.length && fCount <= activeFemales.length) {
+                    
+                    // 休ませてしまう（出場できない）上位メンバーのスコア損失を計算
+                    let loss = 0;
+                    // 男子で漏れた人のスコア損失
+                    for(let i = mCount; i < activeMales.length; i++) {
+                        loss += activeMales[i].score;
+                    }
+                    // 女子で漏れた人のスコア損失
+                    for(let i = fCount; i < activeFemales.length; i++) {
+                        loss += activeFemales[i].score;
+                    }
 
-                if (maleToRest && femaleToPlay) {
-                    selected = selected.filter(p => p.id !== maleToRest.id);
-                    rest = rest.filter(p => p.id !== femaleToPlay.id);
-                    selected.push(femaleToPlay);
-                    rest.push(maleToRest);
-                } else {
-                    let femaleToRest = [...females].sort((a,b) => a.restCount - b.restCount)[0];
-                    let maleToPlay = [...rest].filter(p => p.gender === 'M').sort((a,b) => b.restCount - a.restCount)[0];
-                    if (femaleToRest && maleToPlay) {
-                        selected = selected.filter(p => p.id !== femaleToRest.id);
-                        rest = rest.filter(p => p.id !== maleToPlay.id);
-                        selected.push(maleToPlay);
-                        rest.push(femaleToRest);
+                    if (loss < minScoreLoss) {
+                        minScoreLoss = loss;
+                        bestMalesCount = mCount;
+                        bestFemalesCount = fCount;
                     }
                 }
             }
 
-            const finalMales = selected.filter(p => p.gender === 'M');
-            const finalFemales = selected.filter(p => p.gender === 'F');
+            // 確定したメンバーを抽出
+            let selectedMales = activeMales.slice(0, bestMalesCount);
+            let restMales = activeMales.slice(bestMalesCount);
 
-            const shuffle = (array) => array.sort(() => Math.random() - 0.5);
-            shuffle(finalMales);
-            shuffle(finalFemales);
+            let selectedFemales = activeFemales.slice(0, bestFemalesCount);
+            let restFemales = activeFemales.slice(bestFemalesCount);
 
-            const malePairs = [];
-            for (let i = 0; i < finalMales.length; i += 2) {
-                if(finalMales[i] && finalMales[i+1]) {
-                    malePairs.push([finalMales[i], finalMales[i+1]]);
-                }
-            }
-            const femalePairs = [];
-            for (let i = 0; i < finalFemales.length; i += 2) {
-                if(finalFemales[i] && finalFemales[i+1]) {
-                    femalePairs.push([finalFemales[i], finalFemales[i+1]]);
-                }
+            let selectedTotal = [...selectedMales, ...selectedFemales];
+            let restTotal = [...restMales, ...restFemales];
+
+            // 2連続お休みが発生してしまったかチェック（数学的に避けられないケース）
+            let unpreventableStreak = restTotal.filter(p => p.restStreak >= 1);
+            if (unpreventableStreak.length > 0) {
+                let names = unpreventableStreak.map(p => p.name).join(', ');
+                alertBox.textContent = `【通知】人数の都合上、${names} に連続お休みが発生しました。`;
+                alertBox.classList.remove('hidden');
             }
 
-            const courtMatches = [];
-            let mPool = [...malePairs];
-            let fPool = [...femalePairs];
+            // Step5 & 6: 100回シャッフルによるペア・対戦相手・コートの最適化
+            let bestCourtMatches = null;
+            let minPenalty = Infinity;
 
-            for (let c = 0; c < courtsCount; c++) {
-                let p1, p2, p3, p4;
-                if (mPool.length >= 2) {
-                    const pair1 = mPool.shift(); const pair2 = mPool.shift();
-                    p1 = pair1[0]; p2 = pair1[1]; p3 = pair2[0]; p4 = pair2[1];
-                } else if (fPool.length >= 2) {
-                    const pair1 = fPool.shift(); const pair2 = fPool.shift();
-                    p1 = pair1[0]; p2 = pair1[1]; p3 = pair2[0]; p4 = pair2[1];
-                } else if (mPool.length >= 1 && fPool.length >= 1) {
-                    const mPair = mPool.shift(); const fPair = fPool.shift();
-                    p1 = mPair[0]; p2 = fPair[0]; p3 = mPair[1]; p4 = fPair[1];
-                } else {
-                    // 万が一ペアが作れなくなった場合の安全策
-                    alert("組み合わせの生成に失敗しました。メンバーの男女比を調整してください。");
-                    return;
+            for (let iter = 0; iter < 100; iter++) {
+                // シャッフル
+                let mPool = [...selectedMales].sort(() => Math.random() - 0.5);
+                let fPool = [...selectedFemales].sort(() => Math.random() - 0.5);
+
+                let currentMatches = [];
+                let currentPenalty = 0;
+
+                // 各コートにペアを割り当てる（男4、女4、またはミックス）
+                for (let c = 0; c < courtsCount; c++) {
+                    let p1, p2, p3, p4;
+                    let cNum = c + 1;
+
+                    if (mPool.length >= 4) {
+                        p1 = mPool.shift(); p2 = mPool.shift();
+                        p3 = mPool.shift(); p4 = mPool.shift();
+                    } else if (fPool.length >= 4) {
+                        p1 = fPool.shift(); p2 = fPool.shift();
+                        p3 = fPool.shift(); p4 = fPool.shift();
+                    } else if (mPool.length >= 2 && fPool.length >= 2) {
+                        // ミックスダブス成立の割り当て
+                        let m1 = mPool.shift(); let m2 = mPool.shift();
+                        let f1 = fPool.shift(); let f2 = fPool.shift();
+                        p1 = m1; p2 = f1; // ペアA
+                        p3 = m2; p4 = f2; // ペアB
+                    }
+
+                    currentMatches.push({ p1, p2, p3, p4, cNum });
+
+                    // 重複ペナルティ計算
+                    // ペア重複 (p1-p2, p3-p4)
+                    currentPenalty += getPairCount(p1.id, p2.id) * 50;
+                    currentPenalty += getPairCount(p3.id, p4.id) * 50;
+
+                    // 対戦相手重複 (p1-p3, p1-p4, p2-p3, p2-p4)
+                    currentPenalty += getEnemyCount(p1.id, p3.id) * 10;
+                    currentPenalty += getEnemyCount(p1.id, p4.id) * 10;
+                    currentPenalty += getEnemyCount(p2.id, p3.id) * 10;
+                    currentPenalty += getEnemyCount(p2.id, p4.id) * 10;
+
+                    // コート重複
+                    currentPenalty += getCourtCount(p1.id, cNum) * 5;
+                    currentPenalty += getCourtCount(p2.id, cNum) * 5;
+                    currentPenalty += getCourtCount(p3.id, cNum) * 5;
+                    currentPenalty += getCourtCount(p4.id, cNum) * 5;
                 }
-                courtMatches.push({ p1, p2, p3, p4 });
+
+                if (currentPenalty < minPenalty) {
+                    minPenalty = currentPenalty;
+                    bestCourtMatches = currentMatches;
+                }
             }
 
-            players.forEach(p => { if (p.active) p.lastState = 'none'; });
-            selected.forEach(p => { const found = players.find(x => x.id === p.id); if(found) found.lastState = 'play'; });
+            // 最もペナルティが低かった結果を本採用し、履歴に蓄積
+            bestCourtMatches.forEach(m => {
+                addPairCount(m.p1.id, m.p2.id);
+                addPairCount(m.p3.id, m.p4.id);
 
-            const activeRestPlayers = activePlayers.filter(p => !selected.some(s => s.id === p.id));
-            activeRestPlayers.forEach(p => {
-                const found = players.find(x => x.id === p.id);
-                if(found) { found.lastState = 'rest'; found.restCount += 1; }
+                addEnemyCount(m.p1.id, m.p3.id); addEnemyCount(m.p1.id, m.p4.id);
+                addEnemyCount(m.p2.id, m.p3.id); addEnemyCount(m.p2.id, m.p4.id);
+
+                addCourtCount(m.p1.id, m.cNum); addCourtCount(m.p2.id, m.cNum);
+                addCourtCount(m.p3.id, m.cNum); addCourtCount(m.p4.id, m.cNum);
+            });
+
+            // プレイヤー全体の状態（お休み・連続お休み数）を更新
+            selectedTotal.forEach(p => {
+                p.restStreak = 0; // 出場したのでリセット
+            });
+            restTotal.forEach(p => {
+                p.restCount += 1;
+                p.restStreak += 1; // 休みを加算
             });
 
             matchCount++;
             document.getElementById('text-match-number').textContent = `第${matchCount}試合`;
-            renderCourts(courtMatches);
-            renderRestList(activeRestPlayers);
+            renderCourts(bestCourtMatches);
+            renderRestList(restTotal);
             resetTimer();
         });
 
         function renderCourts(matches) {
             const container = document.getElementById('courts-list');
             container.innerHTML = '';
-            matches.forEach((m, idx) => {
+            matches.forEach((m) => {
                 const courtDiv = document.createElement('div');
                 courtDiv.className = "bg-white p-4 rounded-xl shadow-sm border border-slate-200";
                 const getGenderClass = (p) => p.gender === 'M' ? 'bg-sky-100 text-sky-800 border-sky-200' : 'bg-rose-100 text-rose-800 border-rose-200';
                 courtDiv.innerHTML = `
-                    <h3 class="text-center font-bold text-slate-400 text-xs uppercase tracking-wider mb-3 pb-1 border-b border-slate-100">${idx + 1}コート</h3>
+                    <h3 class="text-center font-bold text-slate-400 text-xs uppercase tracking-wider mb-3 pb-1 border-b border-slate-100">${m.cNum}コート</h3>
                     <div class="grid grid-cols-2 gap-4 text-center">
                         <div class="space-y-1 bg-slate-50/50 p-2 rounded-lg border border-dashed border-slate-200">
                             <div class="text-[10px] text-slate-400 font-bold">ペアA</div>
@@ -411,15 +506,15 @@
                 document.getElementById('text-match-number').textContent = `第0試合`;
                 document.getElementById('courts-list').innerHTML = `<div class="text-center py-8 text-slate-400 text-sm bg-white rounded-xl border border-dashed border-slate-300">「試合抽選」ボタンを押すとここにコートが割り振られます</div>`;
                 document.getElementById('rest-list').innerHTML = '<span class="text-sm text-slate-400 italic">なし</span>';
-                players.forEach(p => p.lastState = 'none');
+                players.forEach(p => p.restStreak = 0);
             }
         });
 
         document.getElementById('btn-reset-counts').addEventListener('click', () => {
-            if(confirm('全員のお休み回数を0にリセットしますか？')) {
-                players.forEach(p => p.restCount = 0);
+            if(confirm('お休み回数と、過去のすべてのペア重複履歴をリセットしますか？')) {
+                initPlayers();
                 renderRestCountsTable();
-                alert('リセットしました');
+                alert('すべての履歴を初期化しました');
             }
         });
 
