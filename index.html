@@ -291,3 +291,233 @@
             if(isTimerRunning) {
                 // ストップ
                 clearInterval(timerId);
+                isTimerRunning = false;
+                btnTimerToggle.textContent = 'スタート';
+                btnTimerToggle.className = "bg-sky-500 hover:bg-sky-600 text-white text-xs px-2.5 py-1 rounded-full font-medium transition";
+            } else {
+                // スタート
+                isTimerRunning = true;
+                btnTimerToggle.textContent = 'ストップ';
+                btnTimerToggle.className = "bg-amber-500 hover:bg-amber-600 text-white text-xs px-2.5 py-1 rounded-full font-medium transition";
+                
+                timerId = setInterval(() => {
+                    if(timerSecondsLeft > 0) {
+                        timerSecondsLeft--;
+                        updateTimerDisplay();
+                    } else {
+                        clearInterval(timerId);
+                        isTimerRunning = false;
+                        btnTimerToggle.textContent = 'リセット';
+                        btnTimerToggle.className = "bg-slate-500 hover:bg-slate-600 text-white text-xs px-2.5 py-1 rounded-full font-medium transition";
+                        alert('試合終了の時間です！');
+                    }
+                }, 1000);
+            }
+        });
+
+
+        // --- 抽選アルゴリズム ---
+        document.getElementById('btn-draw').addEventListener('click', () => {
+            courtsCount = parseInt(document.getElementById('select-courts').value);
+            const neededPlayers = courtsCount * 4;
+            
+            // 現在アクティブな（参加中の）メンバー
+            const activePlayers = players.filter(p => p.active);
+            
+            if(activePlayers.length < neededPlayers) {
+                alert(`参加中のメンバーが足りません。\n現在のコート数に必要な人数: ${neededPlayers}人\n現在オンの人数: ${activePlayers.length}人\n\n「メンバー管理」タブで人数を増やすか、コート数を減らしてください。`);
+                return;
+            }
+
+            // 1. 各プレイヤーの優先度（スコア）を計算してソート
+            const sortedPlayers = [...activePlayers].sort((a, b) => {
+                const aLastRest = a.lastState === 'rest' ? 1 : 0;
+                const bLastRest = b.lastState === 'rest' ? 1 : 0;
+                if(aLastRest !== bLastRest) return bLastRest - aLastRest;
+                if(a.restCount !== b.restCount) return b.restCount - a.restCount;
+                return Math.random() - 0.5;
+            });
+
+            let selected = sortedPlayers.slice(0, neededPlayers);
+            let rest = sortedPlayers.slice(neededPlayers);
+
+            // 2. 選出メンバー内の男女数がそれぞれ偶数になるよう調整
+            let males = selected.filter(p => p.gender === 'M');
+            let females = selected.filter(p => p.gender === 'F');
+
+            if (males.length % 2 !== 0) {
+                let swapped = false;
+                let maleToRest = males.reverse().find(p => p.lastState !== 'rest');
+                let femaleToPlay = rest.find(p => p.gender === 'F');
+
+                if (maleToRest && femaleToPlay) {
+                    selected = selected.filter(p => p.id !== maleToRest.id);
+                    rest = rest.filter(p => p.id !== femaleToPlay.id);
+                    selected.push(femaleToPlay);
+                    rest.push(maleToRest);
+                    swapped = true;
+                } else {
+                    let femaleToRest = females.reverse().find(p => p.lastState !== 'rest');
+                    let maleToPlay = rest.find(p => p.gender === 'M');
+                    
+                    if (femaleToRest && maleToPlay) {
+                        selected = selected.filter(p => p.id !== femaleToRest.id);
+                        rest = rest.filter(p => p.id !== maleToPlay.id);
+                        selected.push(maleToPlay);
+                        rest.push(femaleToRest);
+                        swapped = true;
+                    }
+                }
+            }
+
+            // 3. 最終確定した選出メンバーを男女に分ける
+            const finalMales = selected.filter(p => p.gender === 'M');
+            const finalFemales = selected.filter(p => p.gender === 'F');
+
+            const shuffle = (array) => array.sort(() => Math.random() - 0.5);
+            shuffle(finalMales);
+            shuffle(finalFemales);
+
+            // 4. ペアを作る
+            const malePairs = [];
+            for (let i = 0; i < finalMales.length; i += 2) {
+                malePairs.push([finalMales[i], finalMales[i+1]]);
+            }
+            const femalePairs = [];
+            for (let i = 0; i < finalFemales.length; i += 2) {
+                femalePairs.push([finalFemales[i], finalFemales[i+1]]);
+            }
+
+            // 5. コートへの割り振りと組み合わせ作成
+            const courtMatches = [];
+            let mPool = [...malePairs];
+            let fPool = [...femalePairs];
+
+            for (let c = 0; c < courtsCount; c++) {
+                let p1, p2, p3, p4;
+                if (mPool.length >= 2) {
+                    const pair1 = mPool.shift();
+                    const pair2 = mPool.shift();
+                    p1 = pair1[0]; p2 = pair1[1]; p3 = pair2[0]; p4 = pair2[1];
+                } else if (fPool.length >= 2) {
+                    const pair1 = fPool.shift();
+                    const pair2 = fPool.shift();
+                    p1 = pair1[0]; p2 = pair1[1]; p3 = pair2[0]; p4 = pair2[1];
+                } else {
+                    const mPair = mPool.shift();
+                    const fPair = fPool.shift();
+                    p1 = mPair[0]; p2 = fPair[0];
+                    p3 = mPair[1]; p4 = fPair[1];
+                }
+                courtMatches.push({ p1, p2, p3, p4 });
+            }
+
+            // 6. 状態の更新
+            players.forEach(p => {
+                if (p.active) p.lastState = 'none';
+            });
+
+            selected.forEach(p => {
+                const found = players.find(x => x.id === p.id);
+                if(found) found.lastState = 'play';
+            });
+
+            const activeRestPlayers = activePlayers.filter(p => !selected.some(s => s.id === p.id));
+            activeRestPlayers.forEach(p => {
+                const found = players.find(x => x.id === p.id);
+                if(found) {
+                    found.lastState = 'rest';
+                    found.restCount += 1;
+                }
+            });
+
+            matchCount++;
+            document.getElementById('text-match-number').textContent = `第${matchCount}試合`;
+
+            // 7. 画面へのレンダリング
+            renderCourts(courtMatches);
+            renderRestList(activeRestPlayers);
+            
+            resetTimer();
+        });
+
+        // コートの描画
+        function renderCourts(matches) {
+            const container = document.getElementById('courts-list');
+            container.innerHTML = '';
+
+            matches.forEach((m, idx) => {
+                const courtDiv = document.createElement('div');
+                courtDiv.className = "bg-white p-4 rounded-xl shadow-sm border border-slate-200";
+                
+                const getGenderClass = (p) => p.gender === 'M' ? 'bg-sky-100 text-sky-800 border-sky-200' : 'bg-rose-100 text-rose-800 border-rose-200';
+
+                courtDiv.innerHTML = `
+                    <h3 class="text-center font-bold text-slate-400 text-xs uppercase tracking-wider mb-3 pb-1 border-b border-slate-100">
+                        ${idx + 1}コート
+                    </h3>
+                    <div class="grid grid-cols-2 gap-4 text-center">
+                        <div class="space-y-1 bg-slate-50/50 p-2 rounded-lg border border-dashed border-slate-200">
+                            <div class="text-[10px] text-slate-400 font-bold">ペアA</div>
+                            <div class="p-2 rounded font-bold text-sm border ${getGenderClass(m.p1)}">${m.p1.name}</div>
+                            <div class="p-2 rounded font-bold text-sm border ${getGenderClass(m.p2)}">${m.p2.name}</div>
+                        </div>
+                        <div class="space-y-1 bg-slate-50/50 p-2 rounded-lg border border-dashed border-slate-200">
+                            <div class="text-[10px] text-slate-400 font-bold">ペアB</div>
+                            <div class="p-2 rounded font-bold text-sm border ${getGenderClass(m.p3)}">${m.p3.name}</div>
+                            <div class="p-2 rounded font-bold text-sm border ${getGenderClass(m.p4)}">${m.p4.name}</div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(courtDiv);
+            });
+        }
+
+        // お休みリストの描画
+        function renderRestList(restPlayers) {
+            const container = document.getElementById('rest-list');
+            container.innerHTML = '';
+
+            if(restPlayers.length === 0) {
+                container.innerHTML = '<span class="text-sm text-slate-400 italic">なし</span>';
+                return;
+            }
+
+            restPlayers.forEach(p => {
+                const span = document.createElement('span');
+                const genderClass = p.gender === 'M' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-rose-50 text-rose-700 border-rose-200';
+                span.className = `px-3 py-1 rounded-md text-sm font-bold border ${genderClass}`;
+                span.textContent = p.name;
+                container.appendChild(span);
+            });
+        }
+
+        // --- リセット系の処理 ---
+        document.getElementById('btn-reset-match').addEventListener('click', () => {
+            if(confirm('試合数を0に戻しますか？')) {
+                matchCount = 0;
+                document.getElementById('text-match-number').textContent = `第0試合`;
+                document.getElementById('courts-list').innerHTML = `
+                    <div class="text-center py-8 text-slate-400 text-sm bg-white rounded-xl border border-dashed border-slate-300">
+                        「試合抽選」ボタンを押すとここにコートが割り振られます
+                    </div>
+                `;
+                document.getElementById('rest-list').innerHTML = '<span class="text-sm text-slate-400 italic">なし</span>';
+                players.forEach(p => p.lastState = 'none');
+            }
+        });
+
+        document.getElementById('btn-reset-counts').addEventListener('click', () => {
+            if(confirm('全員のお休み回数を0にリセットしますか？')) {
+                players.forEach(p => p.restCount = 0);
+                renderRestCountsTable();
+                alert('リセットしました');
+            }
+        });
+
+        // --- 初期起動 ---
+        initPlayers();
+        resetTimer();
+    </script>
+</body>
+</html>
