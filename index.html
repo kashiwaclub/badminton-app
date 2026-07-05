@@ -6,10 +6,8 @@
     <title>バドミントン 試合ローテーション</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* iPhoneのホーム画面追加時の対応 */
         meta[name="apple-mobile-web-app-capable"] { content: "yes"; }
         meta[name="apple-mobile-web-app-status-bar-style"] { content: "black-translucent"; }
-        
         .tab-content { display: none; }
         .tab-content.active { display: block; }
         .tab-btn.active {
@@ -24,7 +22,6 @@
     <header class="bg-white border-b border-slate-200 sticky top-0 z-10 px-4 py-3 shadow-sm">
         <div class="max-w-md mx-auto flex justify-between items-center">
             <h1 class="text-lg font-bold text-slate-800 tracking-tight">バドローテ App</h1>
-            
             <div class="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
                 <span id="timer-display" class="font-mono text-lg font-bold text-slate-800">08:00</span>
                 <button id="btn-timer-toggle" class="bg-sky-500 hover:bg-sky-600 text-white text-xs px-2.5 py-1 rounded-full font-medium transition">
@@ -45,8 +42,8 @@
             </button>
         </div>
 
+        <!-- タブ1: 試合表示 -->
         <div id="tab-match" class="tab-content active space-y-4">
-            
             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3">
                 <div class="flex items-center justify-between gap-4">
                     <div class="flex items-center gap-1.5">
@@ -57,14 +54,12 @@
                             <option value="3" selected>3面</option>
                         </select>
                     </div>
-                    
                     <div class="flex items-center gap-1.5">
                         <label class="text-xs font-bold text-slate-500 whitespace-nowrap">時間設定:</label>
                         <input type="number" id="input-timer-min" value="8" min="1" max="60" class="w-12 bg-slate-50 border border-slate-300 rounded px-1.5 py-1 text-sm font-bold text-center text-slate-700 focus:outline-none focus:border-sky-500">
                         <span class="text-xs font-bold text-slate-500">分</span>
                     </div>
                 </div>
-
                 <button id="btn-draw" class="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-2.5 rounded-lg shadow transition text-center block">
                     試合抽選 (次の試合へ)
                 </button>
@@ -95,28 +90,24 @@
             </div>
         </div>
 
+        <!-- タブ2: メンバー管理 -->
         <div id="tab-member" class="tab-content space-y-4">
-            
             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                 <h3 class="text-sm font-bold text-slate-700 mb-2">メンバーの参加・不参加設定</h3>
-                <p class="text-xs text-slate-400 mb-4">今日参加する番号をオンにしてください。練習の途中で追加・離脱させる場合はここで切り替えます。</p>
+                <p class="text-xs text-slate-400 mb-4">今日参加する番号をオンにしてください。タップで切り替えます。</p>
                 
                 <div class="mb-4">
                     <h4 class="text-xs font-bold text-sky-600 mb-2 flex justify-between items-center">
                         <span>男性 (青)</span>
-                        <span class="text-[10px] text-slate-400">タップで切替</span>
                     </h4>
-                    <div id="male-toggle-container" class="grid grid-cols-5 gap-1.5">
-                        </div>
+                    <div id="male-toggle-container" class="grid grid-cols-5 gap-1.5"></div>
                 </div>
 
                 <div>
                     <h4 class="text-xs font-bold text-rose-600 mb-2 flex justify-between items-center">
                         <span>女性 (赤)</span>
-                        <span class="text-[10px] text-slate-400">タップで切替</span>
                     </h4>
-                    <div id="female-toggle-container" class="grid grid-cols-5 gap-1.5">
-                        </div>
+                    <div id="female-toggle-container" class="grid grid-cols-5 gap-1.5"></div>
                 </div>
             </div>
 
@@ -127,7 +118,6 @@
                         回数をリセット
                     </button>
                 </div>
-                
                 <div class="max-h-64 overflow-y-auto">
                     <table class="w-full text-sm">
                         <thead>
@@ -137,76 +127,48 @@
                                 <th class="pb-1 text-right">お休み回数</th>
                             </tr>
                         </thead>
-                        <tbody id="table-rest-counts">
-                            </tbody>
+                        <tbody id="table-rest-counts"></tbody>
                     </table>
                 </div>
             </div>
         </div>
-
     </main>
 
     <script>
-        // --- 状態管理 ---
         let players = [];
         let matchCount = 0;
         let courtsCount = 3;
         
-        // タイマー状態
         let timerSecondsTotal = 8 * 60;
         let timerSecondsLeft = 8 * 60;
         let timerId = null;
         let isTimerRunning = false;
 
-        // プレイヤーの初期化 (男1〜20, 女1〜20)
         function initPlayers() {
             players = [];
-            // 男1〜20
             for(let i = 1; i <= 20; i++) {
-                players.push({
-                    id: 'M' + i,
-                    name: '男' + i,
-                    gender: 'M',
-                    active: i <= 12, // 初期状態で12人ずつ参加にしてみる
-                    restCount: 0,
-                    lastState: 'none' // 'play', 'rest', 'none'
-                });
+                players.push({ id: 'M' + i, name: '男' + i, gender: 'M', active: i <= 12, restCount: 0, lastState: 'none' });
             }
-            // 女1〜20
             for(let i = 1; i <= 20; i++) {
-                players.push({
-                    id: 'F' + i,
-                    name: '女' + i,
-                    gender: 'F',
-                    active: i <= 12, // 初期状態で12人ずつ参加にしてみる
-                    restCount: 0,
-                    lastState: 'none'
-                });
+                players.push({ id: 'F' + i, name: '女' + i, gender: 'F', active: i <= 12, restCount: 0, lastState: 'none' });
             }
         }
 
-        // --- 画面表示更新 ---
-        
-        // タブ切り替え
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-            
             document.getElementById(tabId).classList.add('active');
             if(tabId === 'tab-match') document.getElementById('btn-tab-match').classList.add('active');
             if(tabId === 'tab-member') document.getElementById('btn-tab-member').classList.add('active');
-            
             if(tabId === 'tab-member') {
                 renderMemberManagement();
                 renderRestCountsTable();
             }
         }
 
-        // メンバー管理画面（トグルボタン）の描画
         function renderMemberManagement() {
             const maleContainer = document.getElementById('male-toggle-container');
             const femaleContainer = document.getElementById('female-toggle-container');
-            
             maleContainer.innerHTML = '';
             femaleContainer.innerHTML = '';
             
@@ -216,43 +178,31 @@
                 btn.textContent = p.name;
                 
                 if(p.gender === 'M') {
-                    if(p.active) {
-                        btn.className += ' bg-sky-100 text-sky-800 border-sky-300';
-                    } else {
-                        btn.className += ' bg-slate-100 text-slate-400 border-slate-200 line-through';
-                    }
+                    if(p.active) btn.className += ' bg-sky-100 text-sky-800 border-sky-300';
+                    else btn.className += ' bg-slate-100 text-slate-400 border-slate-200 line-through';
                     btn.onclick = () => { p.active = !p.active; renderMemberManagement(); };
                     maleContainer.appendChild(btn);
                 } else {
-                    if(p.active) {
-                        btn.className += ' bg-rose-100 text-rose-800 border-rose-300';
-                    } else {
-                        btn.className += ' bg-slate-100 text-slate-400 border-slate-200 line-through';
-                    }
+                    if(p.active) btn.className += ' bg-rose-100 text-rose-800 border-rose-300';
+                    else btn.className += ' bg-slate-100 text-slate-400 border-slate-200 line-through';
                     btn.onclick = () => { p.active = !p.active; renderMemberManagement(); };
                     femaleContainer.appendChild(btn);
                 }
             });
         }
 
-        // お休み回数テーブルの描画
         function renderRestCountsTable() {
             const tbody = document.getElementById('table-rest-counts');
             tbody.innerHTML = '';
-            
-            // 参加中を優先、その中でお休み回数が多い順にソートして見やすく
             const sorted = [...players].sort((a, b) => {
                 if(a.active !== b.active) return b.active - a.active;
                 return b.restCount - a.restCount;
             });
-
             sorted.forEach(p => {
                 const tr = document.createElement('tr');
                 tr.className = `border-b border-slate-100 py-1.5 ${p.active ? '' : 'opacity-40'}`;
-                
                 const genderBadge = p.gender === 'M' ? '<span class="text-xs bg-sky-50 text-sky-600 px-1.5 py-0.5 rounded">男</span>' : '<span class="text-xs bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded">女</span>';
                 const statusStr = p.active ? '' : ' <span class="text-[10px] text-slate-400">(不参加)</span>';
-
                 tr.innerHTML = `
                     <td class="py-2 font-medium">${p.name}${statusStr}</td>
                     <td class="py-2">${genderBadge}</td>
@@ -262,7 +212,6 @@
             });
         }
 
-        // --- タイマー機能 ---
         const timerDisplay = document.getElementById('timer-display');
         const btnTimerToggle = document.getElementById('btn-timer-toggle');
         const inputTimerMin = document.getElementById('input-timer-min');
@@ -278,7 +227,6 @@
             isTimerRunning = false;
             btnTimerToggle.textContent = 'スタート';
             btnTimerToggle.className = "bg-sky-500 hover:bg-sky-600 text-white text-xs px-2.5 py-1 rounded-full font-medium transition";
-            
             const mins = parseInt(inputTimerMin.value) || 8;
             timerSecondsTotal = mins * 60;
             timerSecondsLeft = timerSecondsTotal;
@@ -289,17 +237,14 @@
 
         btnTimerToggle.addEventListener('click', () => {
             if(isTimerRunning) {
-                // ストップ
                 clearInterval(timerId);
                 isTimerRunning = false;
                 btnTimerToggle.textContent = 'スタート';
                 btnTimerToggle.className = "bg-sky-500 hover:bg-sky-600 text-white text-xs px-2.5 py-1 rounded-full font-medium transition";
             } else {
-                // スタート
                 isTimerRunning = true;
                 btnTimerToggle.textContent = 'ストップ';
                 btnTimerToggle.className = "bg-amber-500 hover:bg-amber-600 text-white text-xs px-2.5 py-1 rounded-full font-medium transition";
-                
                 timerId = setInterval(() => {
                     if(timerSecondsLeft > 0) {
                         timerSecondsLeft--;
@@ -315,21 +260,16 @@
             }
         });
 
-
-        // --- 抽選アルゴリズム ---
         document.getElementById('btn-draw').addEventListener('click', () => {
             courtsCount = parseInt(document.getElementById('select-courts').value);
             const neededPlayers = courtsCount * 4;
-            
-            // 現在アクティブな（参加中の）メンバー
             const activePlayers = players.filter(p => p.active);
             
             if(activePlayers.length < neededPlayers) {
-                alert(`参加中のメンバーが足りません。\n現在のコート数に必要な人数: ${neededPlayers}人\n現在オンの人数: ${activePlayers.length}人\n\n「メンバー管理」タブで人数を増やすか、コート数を減らしてください。`);
+                alert(`参加中のメンバーが足りません。\n現在のコート数に必要な人数: ${neededPlayers}人\n現在オンの人数: ${activePlayers.length}人`);
                 return;
             }
 
-            // 1. 各プレイヤーの優先度（スコア）を計算してソート
             const sortedPlayers = [...activePlayers].sort((a, b) => {
                 const aLastRest = a.lastState === 'rest' ? 1 : 0;
                 const bLastRest = b.lastState === 'rest' ? 1 : 0;
@@ -341,36 +281,30 @@
             let selected = sortedPlayers.slice(0, neededPlayers);
             let rest = sortedPlayers.slice(neededPlayers);
 
-            // 2. 選出メンバー内の男女数がそれぞれ偶数になるよう調整
             let males = selected.filter(p => p.gender === 'M');
             let females = selected.filter(p => p.gender === 'F');
 
             if (males.length % 2 !== 0) {
-                let swapped = false;
-                let maleToRest = males.reverse().find(p => p.lastState !== 'rest');
-                let femaleToPlay = rest.find(p => p.gender === 'F');
+                let maleToRest = [...males].sort((a,b) => a.restCount - b.restCount)[0];
+                let femaleToPlay = [...rest].filter(p => p.gender === 'F').sort((a,b) => b.restCount - a.restCount)[0];
 
                 if (maleToRest && femaleToPlay) {
                     selected = selected.filter(p => p.id !== maleToRest.id);
                     rest = rest.filter(p => p.id !== femaleToPlay.id);
                     selected.push(femaleToPlay);
                     rest.push(maleToRest);
-                    swapped = true;
                 } else {
-                    let femaleToRest = females.reverse().find(p => p.lastState !== 'rest');
-                    let maleToPlay = rest.find(p => p.gender === 'M');
-                    
+                    let femaleToRest = [...females].sort((a,b) => a.restCount - b.restCount)[0];
+                    let maleToPlay = [...rest].filter(p => p.gender === 'M').sort((a,b) => b.restCount - a.restCount)[0];
                     if (femaleToRest && maleToPlay) {
                         selected = selected.filter(p => p.id !== femaleToRest.id);
                         rest = rest.filter(p => p.id !== maleToPlay.id);
                         selected.push(maleToPlay);
                         rest.push(femaleToRest);
-                        swapped = true;
                     }
                 }
             }
 
-            // 3. 最終確定した選出メンバーを男女に分ける
             const finalMales = selected.filter(p => p.gender === 'M');
             const finalFemales = selected.filter(p => p.gender === 'F');
 
@@ -378,17 +312,19 @@
             shuffle(finalMales);
             shuffle(finalFemales);
 
-            // 4. ペアを作る
             const malePairs = [];
             for (let i = 0; i < finalMales.length; i += 2) {
-                malePairs.push([finalMales[i], finalMales[i+1]]);
+                if(finalMales[i] && finalMales[i+1]) {
+                    malePairs.push([finalMales[i], finalMales[i+1]]);
+                }
             }
             const femalePairs = [];
             for (let i = 0; i < finalFemales.length; i += 2) {
-                femalePairs.push([finalFemales[i], finalFemales[i+1]]);
+                if(finalFemales[i] && finalFemales[i+1]) {
+                    femalePairs.push([finalFemales[i], finalFemales[i+1]]);
+                }
             }
 
-            // 5. コートへの割り振りと組み合わせ作成
             const courtMatches = [];
             let mPool = [...malePairs];
             let fPool = [...femalePairs];
@@ -396,66 +332,47 @@
             for (let c = 0; c < courtsCount; c++) {
                 let p1, p2, p3, p4;
                 if (mPool.length >= 2) {
-                    const pair1 = mPool.shift();
-                    const pair2 = mPool.shift();
+                    const pair1 = mPool.shift(); const pair2 = mPool.shift();
                     p1 = pair1[0]; p2 = pair1[1]; p3 = pair2[0]; p4 = pair2[1];
                 } else if (fPool.length >= 2) {
-                    const pair1 = fPool.shift();
-                    const pair2 = fPool.shift();
+                    const pair1 = fPool.shift(); const pair2 = fPool.shift();
                     p1 = pair1[0]; p2 = pair1[1]; p3 = pair2[0]; p4 = pair2[1];
+                } else if (mPool.length >= 1 && fPool.length >= 1) {
+                    const mPair = mPool.shift(); const fPair = fPool.shift();
+                    p1 = mPair[0]; p2 = fPair[0]; p3 = mPair[1]; p4 = fPair[1];
                 } else {
-                    const mPair = mPool.shift();
-                    const fPair = fPool.shift();
-                    p1 = mPair[0]; p2 = fPair[0];
-                    p3 = mPair[1]; p4 = fPair[1];
+                    // 万が一ペアが作れなくなった場合の安全策
+                    alert("組み合わせの生成に失敗しました。メンバーの男女比を調整してください。");
+                    return;
                 }
                 courtMatches.push({ p1, p2, p3, p4 });
             }
 
-            // 6. 状態の更新
-            players.forEach(p => {
-                if (p.active) p.lastState = 'none';
-            });
-
-            selected.forEach(p => {
-                const found = players.find(x => x.id === p.id);
-                if(found) found.lastState = 'play';
-            });
+            players.forEach(p => { if (p.active) p.lastState = 'none'; });
+            selected.forEach(p => { const found = players.find(x => x.id === p.id); if(found) found.lastState = 'play'; });
 
             const activeRestPlayers = activePlayers.filter(p => !selected.some(s => s.id === p.id));
             activeRestPlayers.forEach(p => {
                 const found = players.find(x => x.id === p.id);
-                if(found) {
-                    found.lastState = 'rest';
-                    found.restCount += 1;
-                }
+                if(found) { found.lastState = 'rest'; found.restCount += 1; }
             });
 
             matchCount++;
             document.getElementById('text-match-number').textContent = `第${matchCount}試合`;
-
-            // 7. 画面へのレンダリング
             renderCourts(courtMatches);
             renderRestList(activeRestPlayers);
-            
             resetTimer();
         });
 
-        // コートの描画
         function renderCourts(matches) {
             const container = document.getElementById('courts-list');
             container.innerHTML = '';
-
             matches.forEach((m, idx) => {
                 const courtDiv = document.createElement('div');
                 courtDiv.className = "bg-white p-4 rounded-xl shadow-sm border border-slate-200";
-                
                 const getGenderClass = (p) => p.gender === 'M' ? 'bg-sky-100 text-sky-800 border-sky-200' : 'bg-rose-100 text-rose-800 border-rose-200';
-
                 courtDiv.innerHTML = `
-                    <h3 class="text-center font-bold text-slate-400 text-xs uppercase tracking-wider mb-3 pb-1 border-b border-slate-100">
-                        ${idx + 1}コート
-                    </h3>
+                    <h3 class="text-center font-bold text-slate-400 text-xs uppercase tracking-wider mb-3 pb-1 border-b border-slate-100">${idx + 1}コート</h3>
                     <div class="grid grid-cols-2 gap-4 text-center">
                         <div class="space-y-1 bg-slate-50/50 p-2 rounded-lg border border-dashed border-slate-200">
                             <div class="text-[10px] text-slate-400 font-bold">ペアA</div>
@@ -467,22 +384,18 @@
                             <div class="p-2 rounded font-bold text-sm border ${getGenderClass(m.p3)}">${m.p3.name}</div>
                             <div class="p-2 rounded font-bold text-sm border ${getGenderClass(m.p4)}">${m.p4.name}</div>
                         </div>
-                    </div>
-                `;
+                    </div>`;
                 container.appendChild(courtDiv);
             });
         }
 
-        // お休みリストの描画
         function renderRestList(restPlayers) {
             const container = document.getElementById('rest-list');
             container.innerHTML = '';
-
             if(restPlayers.length === 0) {
                 container.innerHTML = '<span class="text-sm text-slate-400 italic">なし</span>';
                 return;
             }
-
             restPlayers.forEach(p => {
                 const span = document.createElement('span');
                 const genderClass = p.gender === 'M' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-rose-50 text-rose-700 border-rose-200';
@@ -492,16 +405,11 @@
             });
         }
 
-        // --- リセット系の処理 ---
         document.getElementById('btn-reset-match').addEventListener('click', () => {
             if(confirm('試合数を0に戻しますか？')) {
                 matchCount = 0;
                 document.getElementById('text-match-number').textContent = `第0試合`;
-                document.getElementById('courts-list').innerHTML = `
-                    <div class="text-center py-8 text-slate-400 text-sm bg-white rounded-xl border border-dashed border-slate-300">
-                        「試合抽選」ボタンを押すとここにコートが割り振られます
-                    </div>
-                `;
+                document.getElementById('courts-list').innerHTML = `<div class="text-center py-8 text-slate-400 text-sm bg-white rounded-xl border border-dashed border-slate-300">「試合抽選」ボタンを押すとここにコートが割り振られます</div>`;
                 document.getElementById('rest-list').innerHTML = '<span class="text-sm text-slate-400 italic">なし</span>';
                 players.forEach(p => p.lastState = 'none');
             }
@@ -515,7 +423,6 @@
             }
         });
 
-        // --- 初期起動 ---
         initPlayers();
         resetTimer();
     </script>
