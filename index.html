@@ -19,6 +19,25 @@
 </head>
 <body class="bg-slate-50 text-slate-700 font-sans min-h-screen pb-12">
 
+    <!-- レベル2強: ハッシュ化対応パスワード認証オーバーレイ -->
+    <div id="login-overlay" class="fixed inset-0 bg-slate-800/90 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full space-y-6 transform transition-all">
+            <div class="text-center">
+                <h2 class="text-2xl font-bold text-slate-800 tracking-tight">バドローテ App</h2>
+                <p class="text-sm text-slate-500 mt-2">サークル専用アプリです。<br>パスワードを入力してください。</p>
+            </div>
+            
+            <div class="space-y-2">
+                <input type="password" id="input-password" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-slate-800 text-center font-bold tracking-widest focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition" placeholder="•••••••">
+                <p id="error-password" class="text-xs text-rose-500 text-center font-bold hidden">パスワードが間違っています</p>
+            </div>
+            
+            <button id="btn-login" class="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 rounded-xl shadow-md transition transform active:scale-95">
+                ログイン
+            </button>
+        </div>
+    </div>
+
     <header class="bg-white border-b border-slate-200 sticky top-0 z-10 px-4 py-3 shadow-sm">
         <div class="max-w-md mx-auto flex justify-between items-center">
             <h1 class="text-lg font-bold text-slate-800 tracking-tight">バドローテ App Pro+</h1>
@@ -137,6 +156,45 @@
     </main>
 
     <script>
+        // --- 暗号化対応認証機能 (レベル2・強) ---
+        const loginOverlay = document.getElementById('login-overlay');
+        const inputPassword = document.getElementById('input-password');
+        const btnLogin = document.getElementById('btn-login');
+        const errorPassword = document.getElementById('error-password');
+
+        // "kashiwa" を暗号化したハッシュ値。生文字列はコードから完全に消滅
+        const targetHash = "d0d4b97116812822a13f683416b23a1a3cc7ccb5c4dfdbd6594dcbb5fc622fc3";
+
+        if (localStorage.getItem('badminton_auth') === 'true') {
+            loginOverlay.style.display = 'none';
+        }
+
+        async function attemptLogin() {
+            const inputVal = inputPassword.value;
+            
+            // Web Crypto API を利用してSHA-256でハッシュ化
+            const msgUint8 = new TextEncoder().encode(inputVal);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashedInput = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+            if (hashedInput === targetHash) {
+                localStorage.setItem('badminton_auth', 'true');
+                loginOverlay.style.opacity = '0';
+                setTimeout(() => { loginOverlay.style.display = 'none'; }, 300);
+            } else {
+                errorPassword.classList.remove('hidden');
+                inputPassword.value = '';
+                inputPassword.focus();
+            }
+        }
+
+        btnLogin.addEventListener('click', attemptLogin);
+        inputPassword.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') attemptLogin();
+        });
+
+
         // --- 状態管理 ---
         let players = [];
         let matchCount = 0;
@@ -182,7 +240,7 @@
 
         function initPlayers() {
             players = [];
-            // 男女15人ずつ（計30人仕様）に変更
+            // 30人仕様 (男15、女15)
             for(let i = 1; i <= 15; i++) {
                 players.push({ id: 'M' + i, name: '男' + i, gender: 'M', active: i <= 12, restCount: 0, restStreak: 0 });
             }
@@ -197,7 +255,6 @@
         }
 
         function partialReset() {
-            // active状態は維持しつつ、回数や履歴だけリセット
             players.forEach(p => {
                 p.restCount = 0;
                 p.restStreak = 0;
@@ -212,7 +269,6 @@
             saveState();
         }
 
-        // 履歴カウント取得補助関数
         function getPairCount(p1, p2) {
             if(!p1 || !p2) return 0;
             let key = [p1, p2].sort().join('-');
@@ -298,7 +354,6 @@
             });
         }
 
-        // --- タイマー ---
         const timerDisplay = document.getElementById('timer-display');
         const btnTimerToggle = document.getElementById('btn-timer-toggle');
         const inputTimerMin = document.getElementById('input-timer-min');
@@ -347,7 +402,6 @@
             }
         });
 
-        // --- アルゴリズム ---
         document.getElementById('btn-draw').addEventListener('click', () => {
             courtsCount = parseInt(document.getElementById('select-courts').value);
             const neededPlayers = courtsCount * 4;
@@ -361,48 +415,38 @@
                 return;
             }
 
-            // 【改善①】「休ませる人を選ぶ」のではなく「出場する人を選ぶ」スコア計算
-            // scoreが高いほど「出場させたい（休ませたくない）」
             activePlayers.forEach(p => {
                 p.score = p.restCount * 100;
                 if (p.restStreak >= 1) p.score += 5000;
             });
 
-            // 男女別にスコア順（降順）でソート
             let activeMales = activePlayers.filter(p => p.gender === 'M').sort((a,b) => b.score - a.score);
             let activeFemales = activePlayers.filter(p => p.gender === 'F').sort((a,b) => b.score - a.score);
 
-            // 【改善②】強制出場（restStreak >= 1 の人は可能な限り絶対に出場させる）
-            // 男子、女子それぞれ「連続休みの人数」が「必要な総人数」を超えるケースは数学的例外
             let mustPlayMales = activeMales.filter(p => p.restStreak >= 1).length;
             let mustPlayFemales = activeFemales.filter(p => p.restStreak >= 1).length;
 
             let bestMalesCount = 0;
             let bestFemalesCount = 0;
-            let maxScoreTotal = -Infinity; // 選出されたメンバーの合計スコアが最大になるパターンを探す
+            let maxScoreTotal = -Infinity; 
 
             for (let mCount = 0; mCount <= neededPlayers; mCount += 2) {
                 let fCount = neededPlayers - mCount;
                 if (mCount <= activeMales.length && fCount <= activeFemales.length) {
                     
-                    // 原則禁止ルールのチェック（数学的に可能なのに連続休みを発生させるパターンは除外）
-                    // 参加人数自体が少ない場合は許容（例: 男子全体で14人、3面(12人枠)でmustPlayが13人いる場合は1人漏れるのは仕方ない）
                     let maxPossibleMales = Math.min(activeMales.length, mCount);
                     let maxPossibleFemales = Math.min(activeFemales.length, fCount);
                     
                     let maleStreakViolation = (mustPlayMales > maxPossibleMales) ? (mustPlayMales - maxPossibleMales) : 0;
                     let femaleStreakViolation = (mustPlayFemales > maxPossibleFemales) ? (mustPlayFemales - maxPossibleFemales) : 0;
                     
-                    // 本当に数学的に避けられない違反数
                     let unavoidableMaleViolation = Math.max(0, mustPlayMales - neededPlayers);
                     let unavoidableFemaleViolation = Math.max(0, mustPlayFemales - neededPlayers);
 
-                    // 避けられる違反をしているパターンは却下
                     if (maleStreakViolation > unavoidableMaleViolation || femaleStreakViolation > unavoidableFemaleViolation) {
                         continue; 
                     }
 
-                    // 選出される人のスコア合計を計算（高いほど良い）
                     let currentScore = 0;
                     for(let i = 0; i < mCount; i++) currentScore += activeMales[i].score;
                     for(let i = 0; i < fCount; i++) currentScore += activeFemales[i].score;
@@ -415,7 +459,6 @@
                 }
             }
 
-            // 万が一すべてのパターンが却下された場合（極端な人数構成など）のフォールバック
             if(maxScoreTotal === -Infinity) {
                 bestMalesCount = activeMales.length > neededPlayers ? (neededPlayers % 2 === 0 ? neededPlayers : neededPlayers - 1) : (activeMales.length % 2 === 0 ? activeMales.length : activeMales.length - 1);
                 bestFemalesCount = neededPlayers - bestMalesCount;
@@ -430,7 +473,6 @@
             let selectedTotal = [...selectedMales, ...selectedFemales];
             let restTotal = [...restMales, ...restFemales];
 
-            // 【改善③】通知が嘘にならない判定
             let unavoidableRestStreak = restTotal.filter(p => p.restStreak >= 1);
             if (unavoidableRestStreak.length > 0) {
                 let names = unavoidableRestStreak.map(p => p.name).join(', ');
@@ -438,8 +480,6 @@
                 alertBox.classList.remove('hidden');
             }
 
-            // --- コートごとの組み合わせ生成 ---
-            // 抽出された男女を元に、コート構成（男4/女4/男2女2）のパターンを決定
             let courtConfigs = [];
             let tempM = bestMalesCount;
             let tempF = bestFemalesCount;
@@ -450,15 +490,12 @@
                 else if (tempM >= 2 && tempF >= 2) { courtConfigs.push('MX'); tempM -= 2; tempF -= 2; }
             }
 
-            // シャッフル（コートの順番を毎回変えるため）
             courtConfigs.sort(() => Math.random() - 0.5);
 
-            // 【改善④⑤】全組み合わせ評価
             let mPoolBase = [...selectedMales].sort(() => Math.random() - 0.5);
             let fPoolBase = [...selectedFemales].sort(() => Math.random() - 0.5);
             let bestCourtMatches = [];
             
-            // 各コートごとに独立して最適ペアを探す（貪欲法に近いが、4人の少人数なので全探索）
             let currentMIndex = 0;
             let currentFIndex = 0;
 
@@ -467,7 +504,6 @@
                 let cNum = c + 1;
                 
                 if (config === 'M4' || config === 'F4') {
-                    // 同性4人の場合、組み方は3通り
                     let p1, p2, p3, p4;
                     if(config === 'M4') {
                         p1 = mPoolBase[currentMIndex++]; p2 = mPoolBase[currentMIndex++];
@@ -477,7 +513,6 @@
                         p3 = fPoolBase[currentFIndex++]; p4 = fPoolBase[currentFIndex++];
                     }
 
-                    // 3パターンの組み合わせを評価
                     let patterns = [
                         { a: p1, b: p2, c: p3, d: p4 },
                         { a: p1, b: p3, c: p2, d: p4 },
@@ -495,7 +530,6 @@
                         penalty += getEnemyCount(pat.a.id, pat.d.id) * 10;
                         penalty += getEnemyCount(pat.b.id, pat.c.id) * 10;
                         penalty += getEnemyCount(pat.b.id, pat.d.id) * 10;
-                        // コートペナルティ
                         penalty += getCourtCount(pat.a.id, cNum) * 5;
                         penalty += getCourtCount(pat.b.id, cNum) * 5;
                         penalty += getCourtCount(pat.c.id, cNum) * 5;
@@ -509,13 +543,12 @@
                     bestCourtMatches.push({ p1: bestPattern.a, p2: bestPattern.b, p3: bestPattern.c, p4: bestPattern.d, cNum: cNum });
                 } 
                 else if (config === 'MX') {
-                    // 男女2:2の場合、ミックスダブルスなのでペアは (男1-女1 vs 男2-女2) か (男1-女2 vs 男2-女1) の2通り
                     let m1 = mPoolBase[currentMIndex++]; let m2 = mPoolBase[currentMIndex++];
                     let f1 = fPoolBase[currentFIndex++]; let f2 = fPoolBase[currentFIndex++];
                     
                     let patterns = [
-                        { p1: m1, p2: f1, p3: m2, p4: f2 }, // パターンA
-                        { p1: m1, p2: f2, p3: m2, p4: f1 }  // パターンB
+                        { p1: m1, p2: f1, p3: m2, p4: f2 }, 
+                        { p1: m1, p2: f2, p3: m2, p4: f1 }  
                     ];
 
                     let bestPattern = patterns[0];
@@ -529,7 +562,6 @@
                         penalty += getEnemyCount(pat.p1.id, pat.p4.id) * 10;
                         penalty += getEnemyCount(pat.p2.id, pat.p3.id) * 10;
                         penalty += getEnemyCount(pat.p2.id, pat.p4.id) * 10;
-                        // コートペナルティ
                         penalty += getCourtCount(pat.p1.id, cNum) * 5;
                         penalty += getCourtCount(pat.p2.id, cNum) * 5;
                         penalty += getCourtCount(pat.p3.id, cNum) * 5;
@@ -545,7 +577,6 @@
                 }
             }
 
-            // 履歴への反映
             bestCourtMatches.forEach(m => {
                 addPairCount(m.p1.id, m.p2.id);
                 addPairCount(m.p3.id, m.p4.id);
@@ -557,14 +588,13 @@
                 addCourtCount(m.p3.id, m.cNum); addCourtCount(m.p4.id, m.cNum);
             });
 
-            // 状態更新
             selectedTotal.forEach(p => p.restStreak = 0);
             restTotal.forEach(p => { p.restCount += 1; p.restStreak += 1; });
 
             matchCount++;
             document.getElementById('text-match-number').textContent = `第${matchCount}試合`;
             
-            saveState(); // 毎回ローカルストレージに保存
+            saveState(); 
 
             renderCourts(bestCourtMatches);
             renderRestList(restTotal);
@@ -631,12 +661,10 @@
             }
         });
 
-        // アプリ起動時の初期化
         if (!loadState()) {
-            initPlayers(); // 初回アクセス時のみ実行
+            initPlayers(); 
         }
         resetTimer();
-        // 初期状態でもメンバー管理画面等を描画
         renderMemberManagement();
         renderRestCountsTable();
     </script>
